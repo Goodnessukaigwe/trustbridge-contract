@@ -76,6 +76,7 @@ use soroban_sdk::contracterror;
 /// | 35 | `RoleGrantNotReady` | `activate_role` |
 /// | 36 | `ProvenanceMissing` | `assert_build` |
 /// | 37 | `ProvenanceMismatch` | `assert_build` |
+/// | 57 | `RoleExpired` | any role-gated privileged invocation |
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -160,17 +161,150 @@ pub enum ContractError {
     VerifierNotAllowlisted = 32,
     /// `add_verifier` was called with an `expires_at` that is not in the future.
     VerifierExpiryInPast = 33,
-    /// `activate_role` / `cancel_role_grant` was called with no pending role grant.
-    NoPendingRoleGrant = 34,
-    /// `activate_role` was called before the role grant delay elapsed.
-    RoleGrantNotReady = 35,
-    /// `assert_build` was called without provenance metadata.
-    ProvenanceMissing = 36,
-    /// `assert_build` was called with provenance metadata that does not match.
-    ProvenanceMismatch = 37,
+    /// `activate_role` / `cancel_role_grant` was called for an address with no
+    /// pending grant (Issue #220).
+    NoPendingRoleGrant = 35,
+    /// `activate_role` was called before the grant's timelock elapsed (Issue #220).
+    RoleGrantNotReady = 36,
+    /// `assert_build` was called before any provenance record exists (Issue #225).
+    ProvenanceMissing = 37,
+    /// `assert_build` was given a hash that does not match stored provenance
+    /// (Issue #225).
+    ProvenanceMismatch = 38,
+    /// `upgrade` / `execute_upgrade` was given a WASM hash that does not match
+    /// the staged-WASM slot (Issue #300).
+    StagedWasmMismatch = 39,
+    /// `propose_multisig_upgrade` was called while a proposal is already live
+    /// (Issue #301).
+    UpgradeProposalAlreadyPending = 40,
+    /// `approve_upgrade` / `execute_upgrade` / `cancel_upgrade_proposal` was
+    /// called with no live proposal (or a proposal id that does not match)
+    /// (Issue #301).
+    NoUpgradeProposalPending = 41,
+    /// `approve_upgrade` was called by an address that already approved this
+    /// proposal (Issue #301).
+    UpgradeProposalAlreadyApproved = 42,
+    /// `execute_upgrade` was called before the proposal's delay elapsed
+    /// (Issue #301).
+    UpgradeProposalDelayActive = 43,
+    /// `execute_upgrade` was called before the approval threshold was met
+    /// (Issue #301).
+    UpgradeProposalInsufficientApprovals = 44,
+    /// Instance state was initialized on a different network than the one
+    /// executing (Issue #231).
+    NetworkMismatch = 45,
+    /// `register` was given more fallback addresses than `MAX_FALLBACK_ADDRESSES`.
+    FallbackListFull = 46,
+    /// `rename` was called with a `new_username` that is already registered.
+    UsernameTaken = 47,
+    /// `register` was asked to change the registered address while the rotation
+    /// delay is armed (Issue #234) — use the request/execute rotation flow.
+    RotationRequired = 48,
+    /// A rotation is already pending for this username (Issue #234).
+    RotationPending = 49,
+    /// `execute_address_rotation` / `cancel_address_rotation` was called with no
+    /// pending rotation (Issue #234).
+    NoRotationPending = 50,
+    /// `execute_address_rotation` was called before the delay has elapsed
+    /// (Issue #234).
+    RotationNotReady = 51,
+    /// A pagination cursor no longer decodes against the current registry
+    /// state (Issue #215).
+    InvalidCursor = 52,
+    /// A non-admin caller would exceed its per-ledger verify/revoke cap
+    /// (Issue #292).
+    VerifyRateLimited = 53,
+    /// `batch_remove` was called with a batch larger than the configured
+    /// dual-control threshold (Issue #219) — use `propose_batch_remove` /
+    /// `execute_batch_remove` instead.
+    DualControlRequired = 54,
+    /// `propose_batch_remove` was called while a proposal is already pending
+    /// (Issue #219).
+    BatchRemoveProposalPending = 55,
+    /// `execute_batch_remove` / `cancel_batch_remove` was called with no live
+    /// (or already-expired) proposal (Issue #219).
+    NoPendingBatchRemove = 56,
+    /// A privileged invocation was made by an address whose role grant has
+    /// expired (Issue #428). The caller must have their role renewed via
+    /// `set_role` or `set_role_with_expiry` before retrying.
+    RoleExpired = 57,
 }
 
-/// Coarse classification of a [`ContractError`] for off-chain retry policy.
+impl ContractError {
+    #[must_use]
+    pub fn code(self) -> u32 {
+        self as u32
+    }
+
+    /// Reverse of `code()`: maps a raw u32 (e.g. decoded from a failed
+    /// invocation's XDR result by a dashboard or indexer) back to the typed
+    /// variant. Returns `None` for codes that don't correspond to a variant,
+    /// so callers don't need to keep their own copy of this table in sync.
+    #[must_use]
+    pub fn from_code(code: u32) -> Option<ContractError> {
+        match code {
+            1 => Some(ContractError::AlreadyInitialized),
+            2 => Some(ContractError::NotInitialized),
+            3 => Some(ContractError::NotAuthorized),
+            4 => Some(ContractError::NotRegistered),
+            5 => Some(ContractError::AlreadyVerified),
+            6 => Some(ContractError::NotVerified),
+            7 => Some(ContractError::Paused),
+            8 => Some(ContractError::CooldownActive),
+            9 => Some(ContractError::InvalidVersion),
+            10 => Some(ContractError::InvalidRole),
+            11 => Some(ContractError::InvalidUsername),
+            12 => Some(ContractError::AttestationExpired),
+            13 => Some(ContractError::UnattestedWasm),
+            14 => Some(ContractError::InvalidBatchSize),
+            15 => Some(ContractError::InvalidReasonCode),
+            16 => Some(ContractError::ZeroAddress),
+            17 => Some(ContractError::ChallengeAlreadyActive),
+            18 => Some(ContractError::NoChallengeActive),
+            19 => Some(ContractError::ChallengeNotResolvable),
+            20 => Some(ContractError::ChallengeActive),
+            21 => Some(ContractError::InvalidPauseReason),
+            22 => Some(ContractError::AlreadyReserved),
+            23 => Some(ContractError::NotReserved),
+            24 => Some(ContractError::UsernameReserved),
+            25 => Some(ContractError::ReservedListFull),
+            26 => Some(ContractError::AdminTransferPending),
+            27 => Some(ContractError::AdminTransferDelayActive),
+            28 => Some(ContractError::NoPendingAdminTransfer),
+            29 => Some(ContractError::AttestationRequired),
+            30 => Some(ContractError::NetworkMismatch),
+            31 => Some(ContractError::VerifierAllowlistFull),
+            33 => Some(ContractError::VerifierExpiryInPast),
+            34 => Some(ContractError::VerifierNotAllowlisted),
+            35 => Some(ContractError::NoPendingRoleGrant),
+            36 => Some(ContractError::RoleGrantNotReady),
+            37 => Some(ContractError::ProvenanceMissing),
+            38 => Some(ContractError::ProvenanceMismatch),
+            39 => Some(ContractError::StagedWasmMismatch),
+            40 => Some(ContractError::UpgradeProposalAlreadyPending),
+            41 => Some(ContractError::NoUpgradeProposalPending),
+            42 => Some(ContractError::UpgradeProposalAlreadyApproved),
+            43 => Some(ContractError::UpgradeProposalDelayActive),
+            44 => Some(ContractError::UpgradeProposalInsufficientApprovals),
+            45 => Some(ContractError::NetworkMismatch),
+            46 => Some(ContractError::FallbackListFull),
+            47 => Some(ContractError::UsernameTaken),
+            48 => Some(ContractError::RotationRequired),
+            49 => Some(ContractError::RotationPending),
+            50 => Some(ContractError::NoRotationPending),
+            51 => Some(ContractError::RotationNotReady),
+            52 => Some(ContractError::InvalidCursor),
+            53 => Some(ContractError::VerifyRateLimited),
+            54 => Some(ContractError::DualControlRequired),
+            55 => Some(ContractError::BatchRemoveProposalPending),
+            56 => Some(ContractError::NoPendingBatchRemove),
+            57 => Some(ContractError::RoleExpired),
+            _ => None,
+        }
+    }
+}
+
+/// Off-chain retry classification for a [`ContractError`].
 ///
 /// Off-chain consumers (indexer, dashboard, retry workers) use this to decide
 /// whether a failed invocation is worth retrying, requires operator action, or
@@ -244,6 +378,13 @@ impl ContractError {
             ContractError::NoPendingRoleGrant => ErrorCategory::Fatal,
             ContractError::ProvenanceMissing => ErrorCategory::Fatal,
             ContractError::ProvenanceMismatch => ErrorCategory::Fatal,
+            // Fatal, not Retry: the executing network does not change between
+            // attempts. Someone has to re-deploy or re-tag the instance.
+            ContractError::NetworkMismatch => ErrorCategory::Fatal,
+
+            // A pending grant becomes activatable once its timelock elapses.
+            ContractError::RoleGrantNotReady => ErrorCategory::Retry,
+            ContractError::RoleExpired => ErrorCategory::Auth,
         }
     }
 }

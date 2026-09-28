@@ -5,6 +5,7 @@ mod batch;
 mod domain;
 mod error;
 mod events;
+mod merkle;
 mod multisig_upgrade;
 mod oracle_proof;
 mod staged_wasm;

@@ -448,3 +448,9 @@ Copyright © 2026 [Stellar-TrustBridge](https://github.com/Stellar-TrustBridge)
 
 <!-- handsoff-issue-370 -->
 - #370: Implement public admin-transfer entry points documented in ABI
+
+<!-- handsoff-issue-363 -->
+- #363: Declare mod oracle_proof and mod merkle in lib.rs
+
+<!-- handsoff-issue-369 -->
+- #369: Wire or restore storage helpers for RBAC / rate-limit / emergency paths

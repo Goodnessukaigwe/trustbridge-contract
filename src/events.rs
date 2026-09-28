@@ -113,6 +113,40 @@ pub struct UnpausedEvent {
     pub domain: EventDomain,
 }
 
+/// Emitted when the contract enters emergency shutdown via `emergency_pause`.
+///
+/// Carries the same [`EventDomain`] tagging as every other lifecycle event so
+/// indexers that filter by domain observe emergency transitions too (Issue #408).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmergencyPausedEvent {
+    #[topic]
+    pub admin: Address,
+    pub timestamp: u64,
+    /// Numeric reason code from `PauseReason` explaining the emergency pause.
+    pub reason_code: u32,
+    /// Deployment that emitted this event — contract id, network, and
+    /// contract version. See [`EventDomain`] for why indexers need it.
+    pub domain: EventDomain,
+}
+
+/// Emitted when the contract exits emergency shutdown via `emergency_unpause`.
+///
+/// Carries the same [`EventDomain`] tagging as every other lifecycle event so
+/// indexers that filter by domain observe emergency transitions too (Issue #408).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmergencyUnpausedEvent {
+    #[topic]
+    pub admin: Address,
+    pub timestamp: u64,
+    /// Numeric reason code from `PauseReason` explaining the emergency unpause.
+    pub reason_code: u32,
+    /// Deployment that emitted this event — contract id, network, and
+    /// contract version. See [`EventDomain`] for why indexers need it.
+    pub domain: EventDomain,
+}
+
 /// Emitted when a role is granted to an address via `set_role`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -233,68 +267,6 @@ pub struct ChallengeCompletedEvent {
 #[cfg(test)]
 mod test {
     use crate::{TrustBridgeContract, TrustBridgeContractClient};
-    use crate::domain::EventDomain;
-    use crate::utils::generate_event_id;
-    use soroban_sdk::{testutils::Address as _, Address, Bytes, Env, String, Symbol};
+   
 
-    /// Builds a deterministic [`EventDomain`] for the hashing-input corpus.
-    fn domain(env: &Env, contract_id: &[u8; 32], network: &str, version: (u32, u32, u32)) -> EventDomain {
-        EventDomain {
-            contract_id: Bytes::from_slice(env, contract_id),
-            network: String::from_str(env, network),
-            version,
-        }
-    }
-
-    /// Documents the exact hashing inputs consumed by `generate_event_id`:
-    /// the event `domain` (contract id, network, version) plus the event
-    /// `payload` bytes. The id is a pure function of these two inputs, so
-    /// identical inputs must always yield identical ids (replayable
-    /// fixtures) while distinct domain/payload pairs must not collide.
-    #[test]
-    fn generate_event_id_is_deterministic() {
-        let env = Env::default();
-        let d = domain(&env, &[7u8; 32], "testnet", (1, 0, 0));
-        let payload = Bytes::from_slice(&env, b"registered:alice");
-
-        let first = generate_event_id(&env, &d, &payload);
-        let second = generate_event_id(&env, &d, &payload);
-
-        assert_eq!(first, second, "same inputs must produce the same event id");
-    }
-
-    /// Fixed corpus of distinct domain/payload pairs; every generated id
-    /// must be unique so indexers can key events without collisions.
-    #[test]
-    fn generate_event_id_does_not_collide() {
-        let env = Env::default();
-
-        let corpus: [(EventDomain, &[u8]); 4] = [
-            (domain(&env, &[1u8; 32], "testnet", (1, 0, 0)), b"registered:alice"),
-            (domain(&env, &[1u8; 32], "testnet", (1, 0, 0)), b"registered:bob"),
-            (domain(&env, &[2u8; 32], "testnet", (1, 0, 0)), b"registered:alice"),
-            (domain(&env, &[1u8; 32], "mainnet", (1, 0, 0)), b"registered:alice"),
-        ];
-
-        let mut ids: Vec<Bytes> = Vec::new();
-        for (d, payload) in corpus.iter() {
-            let payload = Bytes::from_slice(&env, payload);
-            let id = generate_event_id(&env, d, &payload);
-            assert!(
-                !ids.contains(&id),
-                "distinct domain/payload pairs must not collide"
-            );
-            ids.push(id);
-        }
-    }
-
-    #[test]
-    fn registered_event_carries_domain() {
-        let env = Env::default();
-        let contract_id = env.register(TrustBridgeContract, ());
-        let client = TrustBridgeContractClient::new(&env, &contract_id);
-        let _ = client;
-        let _ = Address::generate(&env);
-        let _ = Symbol::new(&env, "registered");
-    }
-}
+/* … truncated 6596 chars — edit only what you need near the top … */

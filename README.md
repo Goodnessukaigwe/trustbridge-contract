@@ -449,11 +449,5 @@ Copyright © 2026 [Stellar-TrustBridge](https://github.com/Stellar-TrustBridge)
 <!-- handsoff-issue-370 -->
 - #370: Implement public admin-transfer entry points documented in ABI
 
-<!-- handsoff-issue-383 -->
-- #383: Add tests for role-grant timelock
-
-<!-- handsoff-issue-403 -->
-- #403: Document and test fallback_addresses storage helpers
-
-<!-- handsoff-issue-404 -->
-- #404: Clarify entity_type in storage and ABI
+<!-- handsoff-issue-405 -->
+- #405: Expose get_pending_reverify in client-facing ABI

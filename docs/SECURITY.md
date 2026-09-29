@@ -786,6 +786,7 @@ get_batch_remove_threshold:         public read — no auth, works while paused
 | EB4 | Contract is paused | `Paused` | 7 | `test_pause_blocks_propose_and_execute_but_not_cancel` |
 | EB5 | No proposal is pending | `NoPendingBatchRemove` | 56 | `test_execute_with_no_pending_proposal_fails` |
 | EB6 | Proposal TTL has elapsed (24 h) | `NoPendingBatchRemove` | 56 | `test_execute_after_proposal_ttl_elapsed_rejected` |
+| EB7 | One approver only: records still present; second distinct key completes removal | `Ok(BatchSummary)` after two keys | — | `test_dual_control_batch_remove_requires_both_approvals` |
 
 ### `cancel_batch_remove` — auth matrix
 

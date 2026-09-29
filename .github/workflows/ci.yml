@@ -27,6 +27,12 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
+      # Named blocking step so the homoglyph corpus cannot be dropped if
+      # `make check` / `cargo test` is later filtered. Same quality job —
+      # not a parallel subsystem. Failures fail the pull-request check.
+      - name: Homoglyph corpus tests
+        run: cargo test --test homoglyph_corpus
+
       - name: Run quality gate
         run: make check
 

@@ -749,6 +749,9 @@ execute_batch_remove:
   no live proposal (or expired)                  →  NoPendingBatchRemove
   any other caller                               →  NotAuthorized
 
+Records stay registered until the second distinct approval succeeds
+(`test_dual_control_batch_remove_requires_both_approvals`, Issue #439).
+
 cancel_batch_remove:
   caller == contract admin          →  allowed (works even while paused)
   any other caller                  →  NotAuthorized

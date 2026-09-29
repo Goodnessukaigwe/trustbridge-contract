@@ -87,6 +87,11 @@ pub const MAX_ROLE_PAGE_LIMIT: u32 = 50;
 
 /// Key prefix for chunked username index entries.
 pub const CHUNK_KEY: Symbol = symbol_short!("chunk");
+/// Number of chunk pages in the chunked username index.
+///
+/// The persisted instance symbol is `"chkcnt"` (Soroban `symbol_short!` limit
+/// is 9 bytes). Do **not** introduce a second constant or write `"chunkcnt"`:
+/// live instances already store the count under `"chkcnt"` (Issue #468).
 pub const CHUNK_CNT_KEY: Symbol = symbol_short!("chkcnt");
 /// Monotonic counter bumped every time the flat index's existing positions
 /// shift — i.e. on every removal (Issue #215). An opaque pagination cursor
@@ -2125,7 +2130,11 @@ pub fn get_pause_reason(env: &Env) -> Option<PauseReason> {
     env.storage()
         .instance()
         .get::<Symbol, u32>(&PAUSE_RSN_KEY)
-        .or_else(|| env.storage().instance().get::<Symbol, u32>(&symbol_short!("p_reason")))
+        .or_else(|| {
+            env.storage()
+                .instance()
+                .get::<Symbol, u32>(&symbol_short!("p_reason"))
+        })
         .and_then(PauseReason::from_code)
 }
 
@@ -2395,7 +2404,7 @@ pub fn set_last_event_ledger(env: &Env) {
 #[cfg(test)]
 mod storage_dead_code_tests {
     use super::*;
-    use soroban_sdk::{Address, Env};
+    use soroban_sdk::{symbol_short, testutils::Address as _, Address, Env, Symbol};
 
     fn make_env() -> Env {
         Env::default()
@@ -2480,6 +2489,53 @@ mod storage_dead_code_tests {
                 !has_role_or_admin(&env, &stranger, Role::Verifier),
                 "address with no role must return false"
             );
+        });
+    }
+
+    /// Authoritative chunk-count key is `"chkcnt"`, not the longer `"chunkcnt"`
+    /// spelling that appeared in rent/footprint docs (Issue #468). Reads and
+    /// writes must use [`CHUNK_CNT_KEY`] so a duplicate definition cannot
+    /// silently split the persisted counter.
+    #[test]
+    fn test_chunk_cnt_key_is_chkcnt_not_chunkcnt() {
+        let env = make_env();
+        let contract_id = setup_contract(&env);
+
+        assert_eq!(
+            CHUNK_CNT_KEY,
+            symbol_short!("chkcnt"),
+            "CHUNK_CNT_KEY must remain the persisted chkcnt symbol"
+        );
+        assert_ne!(
+            CHUNK_CNT_KEY,
+            symbol_short!("chunkcnt"),
+            "chunkcnt is not a storage key and must not alias CHUNK_CNT_KEY"
+        );
+
+        env.as_contract(&contract_id, || {
+            set_chunk_count(&env, 7);
+            let via_canonical = env
+                .storage()
+                .instance()
+                .get::<Symbol, u32>(&CHUNK_CNT_KEY)
+                .unwrap_or(0);
+            let via_chkcnt = env
+                .storage()
+                .instance()
+                .get::<Symbol, u32>(&symbol_short!("chkcnt"))
+                .unwrap_or(0);
+            let via_chunkcnt = env
+                .storage()
+                .instance()
+                .get::<Symbol, u32>(&symbol_short!("chunkcnt"))
+                .unwrap_or(0);
+            assert_eq!(via_canonical, 7);
+            assert_eq!(via_chkcnt, 7, "get_chunk_count must persist under chkcnt");
+            assert_eq!(
+                via_chunkcnt, 0,
+                "chunkcnt must not receive the chunk-count write"
+            );
+            assert_eq!(get_chunk_count(&env), 7);
         });
     }
 

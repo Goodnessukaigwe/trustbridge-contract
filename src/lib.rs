@@ -1864,7 +1864,7 @@ impl TrustBridgeContract {
         crate::events::UpgradeProposalExecutedEvent {
             proposal_id,
             wasm_hash: proposal.wasm_hash.clone(),
-            executed_by: caller,
+            executed_by: caller.clone(),
             approval_count,
             timestamp: now,
         }

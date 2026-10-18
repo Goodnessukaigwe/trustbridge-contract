@@ -95,6 +95,14 @@ attacker cannot suppress their own trace via a failed disable-then-probe).
 > Codes are **append-only**. Indexers store the numeric discriminant; renumbering
 > silently re-labels historical entries. New variants must be added at the end.
 
+`tests/testdata/abi/public_entrypoints.golden.json` is a sorted snapshot of
+public function names and arity taken from `docs/abi.json`. `make abi-check`
+and `tests/abi_entrypoints_golden.rs` fail when an entrypoint is removed,
+renamed, or changes arity. Refresh with
+`python3 scripts/generate_abi_json.py --update-entrypoints-golden` only for an
+intentional public ABI change (Issue #631). See
+[the ABI testdata README](../tests/testdata/abi/README.md).
+
 `tests/testdata/bindings/get_address_simulate.v1.json` is a versioned golden of
 the `ScVal` XDR that `simulateTransaction` returns for `get_address` (hit and
 miss). `tests/bindings_golden.rs` fails when the contract encoding drifts, and CI

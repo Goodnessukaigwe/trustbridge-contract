@@ -2682,11 +2682,12 @@ pub fn repair_index(env: &Env, apply: bool) -> RepairReport {
             }
         }
     }
-    let stored_total = get_count(env);
+    let stored_count = get_count(env);
     let stored_verified = get_verified_count(env);
-    let drifted = stored_total != recomputed_total || stored_verified != recomputed_verified;
-    if apply && drifted {
-        set_count(env, recomputed_total);
+    let drifted = stored_count != recomputed_count || stored_verified != recomputed_verified;
+    let applied = apply && drifted;
+    if applied {
+        set_count(env, recomputed_count);
         set_verified_count(env, recomputed_verified);
     }
     RepairReport {

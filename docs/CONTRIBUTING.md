@@ -149,8 +149,20 @@ event topic/data block in `docs/ABI.md`:
 
 ```bash
 make abi        # regenerate docs/abi.json
-make abi-check  # fail with a diff if docs/abi.json is stale (writes nothing)
+make abi-check  # fail with a diff if docs/abi.json or the public-entrypoint golden is stale
 ```
+
+Public function names and arity are snapshotted in
+`tests/testdata/abi/public_entrypoints.golden.json` (Issue #631). After an
+intentional public interface change:
+
+```bash
+python3 scripts/generate_abi_json.py --update-entrypoints-golden
+```
+
+Commit that golden together with `docs/ABI.md` / `docs/abi.json` so reviewers
+see the entrypoint list change in Git. Do not refresh it for documentation-only
+edits. Error-enum codes remain in `abi/contract_error_codes.golden`.
 
 `make abi-check` runs in `make check` and in the CI `quality` job, so a
 release that skips regeneration fails the gate. Commit the regenerated

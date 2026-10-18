@@ -303,6 +303,7 @@ struct ChallengeRecord {
 | 59 | `OracleProofNotAllowlisted` | `verify_with_proof`: `oracle_pubkey` is not on the oracle allowlist (always, when it is empty) |
 | 60 | `OracleProofExpired` | `verify_with_proof`: non-zero `expires_at` is earlier than the ledger timestamp |
 | 61 | `OracleProofBadSignature` | `verify_with_proof`: signature is not a canonical Ed25519 encoding |
+| 62 | `AddressMismatch` | `verify_with_oracle_proof`: proof message is not bound to the record's current `stellar_address` |
 
 > **`NetworkMismatch` moved from 21 to 30.** This table previously listed it at
 > code 21 while the enum had `InvalidPauseReason` there and no `NetworkMismatch`
@@ -1036,7 +1037,8 @@ record's current `stellar_address` — see
 
 **Auth:** the registered `stellar_address`.
 
-**Errors:** `NotInitialized`, `Paused`, `NotRegistered`,
+**Errors:** `NotInitialized`, `Paused`, `NotRegistered`, `ZeroAddress`,
+`AddressMismatch` (62),
 `OracleProofBadLayout` (58), `OracleProofNotAllowlisted` (59),
 `OracleProofExpired` (60), `OracleProofBadSignature` (61), `AlreadyVerified`.
 A well-formed signature that does not verify traps the invocation.

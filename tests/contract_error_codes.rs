@@ -73,6 +73,7 @@ fn variant_for_name(name: &str) -> ContractError {
         "OracleProofNotAllowlisted" => ContractError::OracleProofNotAllowlisted,
         "OracleProofExpired" => ContractError::OracleProofExpired,
         "OracleProofBadSignature" => ContractError::OracleProofBadSignature,
+        "AddressMismatch" => ContractError::AddressMismatch,
         _ => panic!(
             "unknown ContractError in golden file: {name}. \
              Add the variant to variant_for_name, or fix the golden entry."

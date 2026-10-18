@@ -876,6 +876,26 @@ The `verify` function additionally guards against illegal state transitions:
 - Verifying an unregistered username → `NotRegistered` (code 4)
 - Re-verifying an already-verified username → `AlreadyVerified` (code 5)
 
+### Address binding on verification (Issue #634)
+
+Verification is an attestation about the **stored** `ContributorRecord.stellar_address`
+for a GitHub username. The contract never takes a caller-supplied address to
+attach to a successful verify:
+
+| Path | Bound identity | Mismatch behaviour |
+|------|----------------|--------------------|
+| `verify` / `batch_verify` | Record's current `stellar_address` | Caller must be admin or an active Verifier (`NotAuthorized` otherwise). A record bound to the zero/burn address is rejected (`ZeroAddress`) / counted as a **failed** batch item and never increments success counters or emits `VerifiedEvent`. Events and audit rows always copy the stored address. |
+| `verify_with_oracle_proof` | Record's current `stellar_address` **and** the oracle proof's canonical message `<github_username>:<stellar_address>:<expires_at>` | The record owner must `require_auth`. A proof for a different address returns `AddressMismatch` (code 62) **before** verification state, counters, or success events are written. A valid signature cannot skip this comparison. |
+
+**Pending address rotation.** Until `execute_address_rotation` runs, the bound
+address remains the current `stellar_address`. The pending `new_address` is not
+used for verification, events, or oracle-message checks. After execution the
+record is unverified and bound to the new address (existing rotation rules).
+
+**Zero address.** `register` / `register_sponsored` / `request_address_rotation`
+already reject the burn address. `verify` and `batch_verify` still refuse a
+zero-bound record if one is present (for example after a storage repair).
+
 The `revoke_verification` function guards:
 - Revoking from an unregistered username → `NotRegistered` (code 4)
 - Revoking from a username that was never verified → `NotVerified` (code 6)
@@ -959,6 +979,11 @@ hash for upgrades, not an identity claim.)
   is a canonical encoding (`OracleProofBadSignature`, 61), and finally that
   `signature` is a valid Ed25519 signature over `message` under
   `oracle_pubkey`.
+
+`verify_with_oracle_proof` additionally requires `proof.message` to be the
+canonical ownership message for the **record's** `stellar_address`. A proof
+issued for a different address returns `AddressMismatch` (62) and does not
+update verification state.
 
 **Invalid proof fails.** Each rejection above returns its own `Err` code. An
 allowlisted key with a canonically encoded signature that does not verify

@@ -10,26 +10,72 @@ source of truth for topic symbols, field names, and types — mismatches between
 docs and on-chain `#[contractevent]` definitions are tracked as documentation
 bugs.
 
-Key events to watch:
+Cursor pagination over mirrored events must decode **topics** and **data**
+separately ([EVENT_INDEXING.md](EVENT_INDEXING.md)). `topic[0]` is always the
+snake_case event symbol. Additional `#[topic]` fields follow in struct order
+(Soroban allows at most a handful of indexed topics; this contract uses at most
+two extra). Remaining fields are in the XDR **data** map, in the order listed
+below — do not assume struct declaration order if you are looking at a wrapper
+type; these rows match `src/events.rs` emission.
 
-| Event | Topic symbol | Key data fields |
-|---|---|---|
-| `RegisteredEvent` | `registered_event` | `stellar_address`, `timestamp`, `sponsor`, `domain` |
-| `BotStatusChangedEvent` | `bot_status_changed_event` | `is_bot`, `actor`, `timestamp`, `domain` |
-| `VerifiedEvent` | `verified_event` | `stellar_address`, `timestamp` |
-| `VerificationRevokedEvent` | `verification_revoked_event` | `stellar_address`, `timestamp` |
-| `RemovedEvent` | `removed_event` | `stellar_address`, `timestamp` |
-| `UpgradedEvent` | `upgraded_event` | `version`, `timestamp` |
-| `PausedEvent` / `UnpausedEvent` | `paused_event` / `unpaused_event` | `timestamp` |
-| `RoleGrantedEvent` / `RoleRevokedEvent` | `role_granted_event` / `role_revoked_event` | `role`, `admin`, `timestamp` / `admin`, `timestamp` |
+Contributor-facing events are also entities in
+[`docs/subgraph/schema.graphql`](subgraph/schema.graphql). Operational events
+are **not** subgraph entities; consume them from the raw log.
+
+### Contributor events (subgraph)
+
+| Event | `topic[0]` | Additional topics (order) | Data payload (order, type) | GraphQL | Notes |
+|---|---|---|---|---|---|
+| `RegisteredEvent` | `registered_event` | `github_username`: String | `stellar_address`: Address, `timestamp`: u64, `sponsor`: Option\<Address\>, `domain`: EventDomain | [`RegisteredEvent`](subgraph/schema.graphql) | `sponsor` and `domain` are nullable in GraphQL (`sponsor`, `domain`). |
+| `BotStatusChangedEvent` | `bot_status_changed_event` | `github_username`: String | `is_bot`: bool, `actor`: Address, `timestamp`: u64, `domain`: EventDomain | [`BotStatusChangedEvent`](subgraph/schema.graphql) | `github_username` is **not** in data. |
+| `VerifiedEvent` | `verified_event` | `github_username`: String | `stellar_address`: Address, `timestamp`: u64, `domain`: EventDomain | [`VerifiedEvent`](subgraph/schema.graphql) | |
+| `VerificationRevokedEvent` | `verification_revoked_event` | `github_username`: String | `stellar_address`: Address, `timestamp`: u64, `reason_code`: u32, `domain`: EventDomain | [`VerificationRevokedEvent`](subgraph/schema.graphql) | |
+| `RemovedEvent` | `removed_event` | `github_username`: String | `stellar_address`: Address, `timestamp`: u64, `domain`: EventDomain | [`RemovedEvent`](subgraph/schema.graphql) | |
+| `RenamedEvent` | `renamed_event` | `old_username`: String, `new_username`: String | `stellar_address`: Address, `verification_cleared`: bool, `timestamp`: u64 | [`RenamedEvent`](subgraph/schema.graphql) | No `domain` field. |
+| `ChallengeStartedEvent` | `challenge_started_event` | `github_username`: String | `challenged_by`: Address, `resolve_after`: u64, `timestamp`: u64, `domain`: EventDomain | [`ChallengeStartedEvent`](subgraph/schema.graphql) | |
+| `ChallengeCancelledEvent` | `challenge_cancelled_event` | `github_username`: String | `cancelled_by`: Address, `timestamp`: u64, `domain`: EventDomain | [`ChallengeCancelledEvent`](subgraph/schema.graphql) | |
+| `ChallengeCompletedEvent` | `challenge_completed_event` | `github_username`: String | `completed_by`: Address, `timestamp`: u64, `domain`: EventDomain | [`ChallengeCompletedEvent`](subgraph/schema.graphql) | |
+| `RotationRequestedEvent` | `rotation_requested_event` | `github_username`: String | `current_address`: Address, `new_address`: Address, `executable_at`: u64, `timestamp`: u64 | [`RotationRequestedEvent`](subgraph/schema.graphql) | No `domain`. |
+| `RotationExecutedEvent` | `rotation_executed_event` | `github_username`: String | `old_address`: Address, `new_address`: Address, `timestamp`: u64 | [`RotationExecutedEvent`](subgraph/schema.graphql) | |
+| `RotationCancelledEvent` | `rotation_cancelled_event` | `github_username`: String | `cancelled_by`: Address, `timestamp`: u64 | [`RotationCancelledEvent`](subgraph/schema.graphql) | |
+
+### Operational events (raw log only)
+
+| Event | `topic[0]` | Additional topics (order) | Data payload (order, type) | Notes |
+|---|---|---|---|---|
+| `PausedEvent` | `paused_event` | `admin`: Address | `timestamp`: u64, `reason_code`: u32, `domain`: EventDomain | Do not read `reason_code` from topics. |
+| `UnpausedEvent` | `unpaused_event` | `admin`: Address | `timestamp`: u64, `reason_code`: u32, `domain`: EventDomain | Same shape as pause. |
+| `EmergencyPausedEvent` | `emergency_paused_event` | `admin`: Address | `timestamp`: u64, `reason_code`: u32, `domain`: EventDomain | |
+| `EmergencyClearedEvent` | `emergency_cleared_event` | `admin`: Address | `timestamp`: u64, `domain`: EventDomain | **No** `reason_code`. |
+| `GuardianChangedEvent` | `guardian_changed_event` | `guardian`: Option\<Address\> | `admin`: Address, `timestamp`: u64 | No `domain`. `guardian` may be none. |
+| `RoleGrantPendingEvent` | `role_grant_pending_event` | `address`: Address | `role`: u32, `admin`: Address, `activate_at`: u64, `timestamp`: u64 | `role` is **data**, not a topic. No `domain`. |
+| `RoleGrantCancelledEvent` | `role_grant_cancelled_event` | `address`: Address | `admin`: Address, `timestamp`: u64 | |
+| `RoleGrantedEvent` | `role_granted_event` | `address`: Address | `role`: u32, `admin`: Address, `timestamp`: u64, `domain`: EventDomain | |
+| `RoleRevokedEvent` | `role_revoked_event` | `address`: Address | `admin`: Address, `timestamp`: u64, `domain`: EventDomain | **No** `role` in the payload (legacy). Correlate with the last `RoleGrantedEvent`. |
+| `UpgradedEvent` | `upgraded_event` | `new_wasm_hash`: BytesN\<32\> | `version`: (u32,u32,u32), `timestamp`: u64, `domain`: EventDomain | |
+| `WasmStagedEvent` | `wasm_staged_event` | `wasm_hash`: BytesN\<32\> | `staged_by`: Address, `timestamp`: u64 | |
+| `StagedWasmClearedEvent` | `staged_wasm_cleared_event` | `wasm_hash`: BytesN\<32\> | `cleared_by`: Address, `timestamp`: u64 | Not emitted on an empty-slot `clear_staged`. |
+| `UpgradeAttestedEvent` | `upgrade_attested_event` | `wasm_hash`: BytesN\<32\> | `expires_at`: u64, `timestamp`: u64 | |
+| `AttestationClearedEvent` | `attestation_cleared_event` | `wasm_hash`: BytesN\<32\> | `expires_at`: u64, `timestamp`: u64 | |
+| `UpgradeProposedEvent` | `upgrade_proposed_event` | `proposal_id`: u32 | `proposed_by`: Address, `wasm_hash`: BytesN\<32\>, `executable_at`: u64, `timestamp`: u64 | |
+| `UpgradeApprovedEvent` | `upgrade_approved_event` | `proposal_id`: u32 | `approved_by`: Address, `approval_count`: u32, `timestamp`: u64 | |
+| `UpgradeProposalExecutedEvent` | `upgrade_proposal_executed_event` | `proposal_id`: u32 | `executed_by`: Address, `wasm_hash`: BytesN\<32\>, `approval_count`: u32, `timestamp`: u64 | |
+| `UpgradeProposalCancelledEvent` | `upgrade_proposal_cancelled_event` | `proposal_id`: u32 | `cancelled_by`: Address, `wasm_hash`: BytesN\<32\>, `timestamp`: u64 | |
+| `BatchRemoveProposedEvent` | `batch_remove_proposed_event` | `proposed_by`: Address | `count`: u32, `timestamp`: u64, `domain`: EventDomain | |
+| `BatchRemoveExecutedEvent` | `batch_remove_executed_event` | `executed_by`: Address | `proposed_by`: Address, `count`: u32, `successful`: u32, `timestamp`: u64, `domain`: EventDomain | |
+| `BatchRemoveCancelledEvent` | `batch_remove_cancelled_event` | `cancelled_by`: Address | `proposed_by`: Address, `timestamp`: u64, `domain`: EventDomain | |
+| `VerificationConfiguredEvent` | `verification_configured_event` | `admin`: Address | `attestation`: Symbol, `expires_in`: u64, `threshold`: u32, `timestamp`: u64 | |
+| `AuditConfigChangedEvent` | `audit_config_changed_event` | `admin`: Address | `enabled`: bool, `max_events`: u32, `log_unauthorized`: bool, `timestamp`: u64 | |
 
 > **Bot flag:** update the dashboard's `is_bot` column from `BotStatusChangedEvent`
 > instead of re-exporting the registry; the latest event per `github_username`
 > (by ledger order) is authoritative.
 
-> **Note:** `RoleRevokedEvent` does **not** include the `role` field in its data
-> payload. If your indexer needs to know which role was revoked, correlate the
-> revocation with the most recent `RoleGrantedEvent` for that address.
+> **Pause events:** `admin` is an indexed topic. `reason_code` and `domain` are
+> data fields. `EmergencyClearedEvent` has no reason code.
+
+> **RoleGrantPendingEvent:** decode `role`, `admin`, `activate_at`, and
+> `timestamp` from data. Only `address` is topic-indexed besides the symbol.
 
 ## Features & Integration Overview
 

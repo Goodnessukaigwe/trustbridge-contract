@@ -222,7 +222,9 @@ pub fn verify_with_oracle_proof(
     proof: &OracleProof,
 ) -> Result<(), ContractError> {
     verify_with_proof(env, proof).map_err(|_| ContractError::NotAuthorized)?;
-    crate::storage::set_oracle_verified(env, subject);
+    env.storage()
+        .instance()
+        .set(&(symbol_short!("orcvrfy"), subject.clone()), &true);
     Ok(())
 }
 

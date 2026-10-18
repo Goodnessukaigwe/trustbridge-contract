@@ -1864,7 +1864,7 @@ impl TrustBridgeContract {
         crate::events::UpgradeProposalExecutedEvent {
             proposal_id,
             wasm_hash: proposal.wasm_hash.clone(),
-            executed_by: caller,
+            executed_by: caller.clone(),
             approval_count,
             timestamp: now,
         }
@@ -12148,6 +12148,86 @@ mod test {
                 1,
             );
             assert_eq!(result, Err(ContractError::RoleExpired));
+        });
+    }
+
+    /// `clear_staged` with no staged WASM is idempotent: admin auth, `Ok(())`,
+    /// no `StagedWasmClearedEvent`, and no leftover instance key.
+    #[test]
+    fn test_clear_staged_empty_slot_is_idempotent() {
+        let env = Env::default();
+        let (admin, _user, _other, contract_id) = setup(&env);
+        env.mock_all_auths();
+        env.as_contract(&contract_id, || {
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_none());
+        });
+        let events_before = env.events().all();
+        env.as_contract(&contract_id, || {
+            TrustBridgeContract::clear_staged(env.clone(), admin.clone()).unwrap();
+        });
+        env.as_contract(&contract_id, || {
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_none());
+            assert!(
+                !env.storage()
+                    .instance()
+                    .has(&crate::staged_wasm::STAGED_WASM_KEY)
+            );
+        });
+        assert_eq!(
+            env.events().all(),
+            events_before,
+            "empty-slot clear must not emit StagedWasmClearedEvent"
+        );
+        env.as_contract(&contract_id, || {
+            TrustBridgeContract::clear_staged(env.clone(), admin.clone()).unwrap();
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_none());
+        });
+    }
+
+    /// Non-admin `clear_staged` fails before touching storage or emitting a
+    /// success event, even when the slot is already empty.
+    #[test]
+    fn test_clear_staged_empty_slot_non_admin_rejected() {
+        let env = Env::default();
+        let (_admin, user, _other, contract_id) = setup(&env);
+        env.mock_all_auths();
+        env.as_contract(&contract_id, || {
+            let events_before = env.events().all();
+            let result = TrustBridgeContract::clear_staged(env.clone(), user.clone());
+            assert_eq!(result, Err(ContractError::NotAuthorized));
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_none());
+            assert!(
+                !env.storage()
+                    .instance()
+                    .has(&crate::staged_wasm::STAGED_WASM_KEY)
+            );
+            assert_eq!(env.events().all(), events_before);
+        });
+    }
+
+    /// After a successful clear, a second admin `clear_staged` stays a no-op
+    /// (same as the post-upgrade empty slot).
+    #[test]
+    fn test_clear_staged_after_successful_clear_remains_empty() {
+        let env = Env::default();
+        let (admin, _user, _other, contract_id) = setup(&env);
+        env.mock_all_auths();
+        env.as_contract(&contract_id, || {
+            let hash = BytesN::from_array(&env, &[0xAB; 32]);
+            TrustBridgeContract::stage_wasm(env.clone(), admin.clone(), hash).unwrap();
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_some());
+        });
+        env.as_contract(&contract_id, || {
+            TrustBridgeContract::clear_staged(env.clone(), admin.clone()).unwrap();
+        });
+        env.as_contract(&contract_id, || {
+            TrustBridgeContract::clear_staged(env.clone(), admin.clone()).unwrap();
+            assert!(TrustBridgeContract::get_staged(env.clone()).is_none());
+            assert!(
+                !env.storage()
+                    .instance()
+                    .has(&crate::staged_wasm::STAGED_WASM_KEY)
+            );
         });
     }
 
